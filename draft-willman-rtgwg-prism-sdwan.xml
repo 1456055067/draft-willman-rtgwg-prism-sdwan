@@ -36,6 +36,21 @@
         <uri>https://www.linkedin.com/in/johnewillmanv</uri>
       </address>
     </author>
+    <author fullname="Satoru Kanno" initials="S." surname="Kanno">
+      <organization>GMO Internet Group, Inc.</organization>
+      <address>
+        <postal>
+          <street>Cerulean Tower</street>
+          <street>26-1 Sakuragaokacho</street>
+          <city>Shibuya</city>
+          <region>Tokyo</region>
+          <code>150-8512</code>
+          <country>Japan</country>
+        </postal>
+        <email>kanno@gmo-connect.jp</email>
+        <uri>https://www.linkedin.com/in/satoru-kanno/</uri>
+      </address>
+    </author>
     <date year="2026" month="2" day="03" />
     <area>Operations and Management</area>
     <workgroup>Routing Working Group</workgroup>
@@ -60,7 +75,7 @@
         provides the application intelligence and policy enforcement.</t>
       <t>
         The protocol is fully programmable via gRPC, supports distributed and
-        centralized deployment models, and mandates compliance with
+        centralized deployment models, and mandates a phased transition to
         Commercial National Security Algorithm Suite 2.0 (CNSA 2.0)
         cryptographic requirements.</t>
     </abstract>
@@ -208,7 +223,7 @@
  +--------------------------+--------------------------------------+
  | API Coverage             | 100% functionality via gRPC          |
  +--------------------------+--------------------------------------+
- | Cryptographic Suite      | Full CNSA 2.0 compliance             |
+ | Cryptographic Suite      | CNSA 2.0 readiness (phased)          |
  +--------------------------+--------------------------------------+
 ]]></artwork>
         </figure>
@@ -296,7 +311,7 @@
               A set of patterns or heuristics used to
             </t>
             <t>
-              Identify a specific application from its network traffic.
+              identify a specific application from its network traffic.
             </t>
           </dd>
           <dt>Flow:</dt>
@@ -391,7 +406,7 @@
             </t>
             <t>
               responsible for policy management and distribution, application
-              signature database maintenance, aggregated analytics, and
+              signature database maintenance, aggregated analytics and
               reporting, and SLA monitoring dashboard.
             </t>
           </dd>
@@ -521,11 +536,17 @@
           <dt>TLS Server Name Indication (SNI):</dt>
           <dd>
             <t>
-              The SNI field in the TLS
+              The SNI field in the TLS Client Hello message reveals the
+              intended server hostname, making it the primary method for
+              HTTPS application classification.
             </t>
             <t>
-              The client Hello message reveals the intended server hostname. This is
-              the primary method for HTTPS classification.
+              Note: The effectiveness of SNI-based identification will
+              diminish as Encrypted Client Hello (ECH)
+              <xref target="I-D.ietf-tls-esni"/> is deployed. Implementations
+              SHOULD prioritize heuristic and behavioral analysis methods
+              (<xref target="sect-4.1"/>) to maintain classification
+              accuracy for ECH-protected flows.
             </t>
           </dd>
           <dt>TLS Certificate Analysis:</dt>
@@ -541,10 +562,11 @@
           <dt>JA3/JA3S Fingerprinting:</dt>
           <dd>
             <t>
-              TLS handshake characteristics create a unique
-            </t>
-            <t>
-              fingerprints for client and server implementations.
+              TLS handshake characteristics create unique fingerprints
+              for client and server implementations. Note that JA3
+              hashes use MD5 for identification purposes only; this does
+              not affect CNSA compliance as no cryptographic protection
+              is derived from these hashes.
             </t>
           </dd>
           <dt>Encrypted Traffic Behavioral Analysis:</dt>
@@ -559,9 +581,9 @@
           </dd>
         </dl>
         <t>
-          IMPORTANT: PRISM does not perform TLS interception or decryption.
+          PRISM MUST NOT perform TLS interception or decryption.
           All encrypted traffic analysis is performed on metadata and
-          observable traffic characteristics.</t>
+          observable traffic characteristics only.</t>
       </section>
       <section anchor="sect-4.3" numbered="true" toc="default">
         <name>Application Categories</name>
@@ -794,7 +816,6 @@
             <t>
               Permit, deny, redirect to inspection
             </t>
-            <t />
           </dd>
         </dl>
       </section>
@@ -901,7 +922,6 @@
             <t>
               Bytes per second over measurement interval.
             </t>
-            <t />
           </dd>
         </dl>
       </section>
@@ -915,21 +935,18 @@
             <t>
               Generate alert, no corrective action.
             </t>
-            <t />
           </dd>
           <dt>Reclassify:</dt>
           <dd>
             <t>
               Move the flow to a different traffic class.
             </t>
-            <t />
           </dd>
           <dt>Path Switch:</dt>
           <dd>
             <t>
               Signal SRv6 to prefer the alternate path.
             </t>
-            <t />
           </dd>
         </dl>
         <t>
@@ -943,13 +960,15 @@
         <t>
           PRISM control messages are transported via UDP on port 4796.</t>
         <t>
+          PRISM control messages MUST be transported within a CONDUIT encrypted tunnel fabric to ensure confidentiality. Implementations MUST drop PRISM control messages received on unprotected interfaces.</t>
+        <t>
           All control messages are authenticated using HMAC-SHA-384.</t>
       </section>
       <section anchor="sect-9.2" numbered="true" toc="default">
         <name>Message Header</name>
         <artwork name="" type="" align="left" alt=""><![CDATA[
-0                   1                   2                   3
-0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2
+ 0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |    Version    |     Type      |            Flags              |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -967,12 +986,35 @@
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |                                                               |
 +                                                               +
-|                      HMAC-SHA-384 (384 bits)                  |
+|                                                               |
++                                                               +
+|                                                               |
++                                                               +
+|                                                               |
++                   HMAC-SHA-384 (384 bits)                     +
+|                                                               |
++                                                               +
+|                                                               |
++                                                               +
+|                                                               |
++                                                               +
+|                                                               |
++                                                               +
+|                                                               |
 +                                                               +
 |                                                               |
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-Total header size: 72 octets (consistent with CONDUIT)
+Total header size: 76 octets
+  Version:         8 bits  ( 1 octet)
+  Type:            8 bits  ( 1 octet)
+  Flags:          16 bits  ( 2 octets)
+  Length:         16 bits  ( 2 octets)
+  Reserved:       16 bits  ( 2 octets)
+  Node ID:        64 bits  ( 8 octets)
+  Sequence Number: 32 bits ( 4 octets)
+  Timestamp:      64 bits  ( 8 octets)
+  HMAC-SHA-384:  384 bits  (48 octets)
 ]]></artwork>
       </section>
       <section anchor="sect-9.3" numbered="true" toc="default">
@@ -991,6 +1033,8 @@ Total header size: 72 octets (consistent with CONDUIT)
  +-------+---------------+----------------------------------------+
  | 0x02  | HELLO_ACK     | Response to HELLO                      |
  +-------+---------------+----------------------------------------+
+ | 0x0F  | ERROR         | Error notification                     |
+ +-------+---------------+----------------------------------------+
  | 0x10  | POLICY_PUSH   | Policy distribution from controller    |
  +-------+---------------+----------------------------------------+
  | 0x11  | POLICY_ACK    | Policy receipt acknowledgment          |
@@ -1004,8 +1048,6 @@ Total header size: 72 octets (consistent with CONDUIT)
  | 0x31  | SLA_CLEAR     | SLA violation cleared                  |
  +-------+---------------+----------------------------------------+
  | 0x40  | APP_SIGNATURE | Application signature update           |
- +-------+---------------+----------------------------------------+
- | 0x0F  | ERROR         | Error notification                     |
  +-------+---------------+----------------------------------------+
 ]]></artwork>
         </figure>
@@ -1030,57 +1072,133 @@ Total header size: 72 octets (consistent with CONDUIT)
           <t>
             Application signature management
           </t>
-          <t />
         </dd>
         <dt>FlowService:</dt>
         <dd>
           <t>
             Flow visibility and real-time streaming
           </t>
-          <t />
         </dd>
         <dt>AnalyticsService:</dt>
         <dd>
           <t>
             SLA compliance reports and traffic analytics
           </t>
-          <t />
         </dd>
         <dt>ConfigService:</dt>
         <dd>
           <t>
             Node configuration
           </t>
-          <t />
         </dd>
       </dl>
       <t>
-        All gRPC connections MUST use mutual TLS (mTLS) with CNSA 2.0
-        compliant certificates.</t>
+        All gRPC connections MUST use mutual TLS (mTLS). Certificate
+        requirements follow the Phased Transition model defined in
+        <xref target="sect-11.2"/>. Phase 1 implementations MAY use
+        CNSA 1.0 compliant certificates (ECDSA P-384). Phase 2
+        implementations SHOULD use hybrid certificates combining
+        ECDSA P-384 and ML-DSA-87. Phase 3 implementations MUST use
+        CNSA 2.0 compliant certificates (ML-DSA-87).</t>
     </section>
     <section anchor="sect-11" numbered="true" toc="default">
-      <name>Cryptographic Requirements</name>
+      <name>Cryptographic Agility and Transition</name>
       <t>
-        PRISM implementations MUST comply with CNSA 2.0:</t>
-      <ul spacing="normal">
-        <li>
-          <t>AES-256-GCM for symmetric encryption</t>
-        </li>
-        <li>
-          <t>ECDH P-384 for key exchange</t>
-        </li>
-        <li>
-          <t>ECDSA P-384 for digital signatures</t>
-        </li>
-        <li>
-          <t>SHA-384 for hashing</t>
-        </li>
-        <li>
-          <t>HMAC-SHA-384 for message authentication</t>
-        </li>
-      </ul>
-      <t>
-        The gRPC API MUST use TLS 1.3 with the TLS_AES_256_GCM_SHA384 cipher suite.</t>
+        To ensure long-term security against quantum threats while maintaining
+        operational readiness, PRISM adopts a phased transition strategy aligned
+        with CNSA 2.0 timelines and IETF guidance on Post-Quantum Cryptography
+        <xref target="I-D.ietf-pquip-pqc-engineers" />. This approach mandates
+        cryptographic agility, enabling seamless updates to algorithms without
+        protocol redesign.</t>
+      <section anchor="sect-11.1" numbered="true" toc="default">
+        <name>Cryptographic Agility</name>
+        <t>
+          PRISM implementations MUST support cryptographic agility. Control plane
+          messages and data plane encapsulations MUST include versioning or
+          algorithm identifiers to allow negotiation of cryptographic suites.
+          Implementations SHOULD be capable of upgrading cryptographic libraries
+          independently of the core protocol logic.</t>
+      </section>
+      <section anchor="sect-11.2" numbered="true" toc="default">
+        <name>Phased Transition</name>
+        <t>
+          The transition to Post-Quantum Cryptography (PQC) is defined in three
+          phases, aligning with the transition models described in
+          <xref target="NIST.IR.8547" />, <xref target="ENISA-PQC" />, and
+          <xref target="BSI-PQC" />, and the timeline mandated by
+          <xref target="CNSA2.0" />:</t>
+        <dl newline="false" spacing="normal" indent="3">
+          <dt>Phase 1 (Legacy/Current):</dt>
+          <dd>
+            <t>
+              Uses CNSA 1.0 algorithms (ECC P-384, AES-256). This phase supports
+              immediate deployment with currently FIPS-validated hardware and
+              software. New deployments SHOULD plan for Phase 2 migration.
+            </t>
+          </dd>
+          <dt>Phase 2 (Transitional/Hybrid):</dt>
+          <dd>
+            <t>
+              Uses hybrid schemes combining CNSA 1.0 and CNSA 2.0 algorithms.
+              Hybrid key exchange (e.g., ECDH P-384 + ML-KEM) and signatures
+              provide "defense in depth" during the transition period. This phase
+              is RECOMMENDED for all systems as PQC libraries become available.
+            </t>
+          </dd>
+          <dt>Phase 3 (Target):</dt>
+          <dd>
+            <t>
+              Uses pure CNSA 2.0 algorithms (ML-KEM, ML-DSA). Mandatory for all
+              new systems by December 31, 2030 (software/firmware and traditional
+              networking equipment) or 2033 (niche equipment), per CNSA 2.0
+              guidance. The goal is for all NSS to be quantum-resistant by 2035.
+            </t>
+          </dd>
+        </dl>
+      </section>
+      <section anchor="sect-11.3" numbered="true" toc="default">
+        <name>Algorithm Requirements by Phase</name>
+        <t>
+          Implementations MUST support the algorithms defined for their operating
+          phase:</t>
+        <figure anchor="crypto-phases">
+          <artwork name="" type="" align="left" alt=""><![CDATA[
+ +==============+=================+===================+=================+
+ | Algorithm    | Phase 1 (Legacy)| Phase 2 (Hybrid)  | Phase 3 (Target)|
+ +==============+=================+===================+=================+
+ | Sym. Enc.    | AES-256-GCM     | AES-256-GCM       | AES-256-GCM     |
+ +--------------+-----------------+-------------------+-----------------+
+ | Key Exchange | ECDH P-384      | ECDH P-384 +      | ML-KEM-1024     |
+ |              |                 | ML-KEM-1024       |                 |
+ +--------------+-----------------+-------------------+-----------------+
+ | Dig. Sig.    | ECDSA P-384     | ECDSA P-384 +     | ML-DSA-87       |
+ |              |                 | ML-DSA-87         |                 |
+ +--------------+-----------------+-------------------+-----------------+
+ | Hashing      | SHA-384         | SHA-384 / SHA-512 | SHA-384 /       |
+ |              |                 |                   | SHA-512         |
+ +--------------+-----------------+-------------------+-----------------+
+ | State Sig.   | LMS / XMSS      | LMS / XMSS        | LMS / XMSS      |
+ | (Firmware)   |                 |                   |                 |
+ +--------------+-----------------+-------------------+-----------------+
+]]></artwork>
+        </figure>
+        <t>
+          Note: "ML-KEM" refers to Module-Lattice-Based Key-Encapsulation
+          Mechanism (FIPS 203). "ML-DSA" refers to Module-Lattice-Based
+          Digital Signature Standard (FIPS 204).</t>
+      </section>
+      <section anchor="sect-11.4" numbered="true" toc="default">
+        <name>Transport Security</name>
+        <t>
+          gRPC connections MUST use TLS 1.3. For Phase 1, the
+          TLS_AES_256_GCM_SHA384 cipher suite is REQUIRED. Phase 2 and 3
+          implementations MUST support PQC-aware TLS cipher suites as they are
+          standardized by the IETF (e.g., <xref target="I-D.ietf-tls-hybrid-design" />,
+          <xref target="I-D.ietf-tls-mlkem" />).
+          For IPsec compliance (via CONDUIT), implementations MUST support
+          <xref target="RFC9370" /> to enable multiple key exchanges for
+          hybrid PQC.</t>
+      </section>
     </section>
     <section anchor="sect-12" numbered="true" toc="default">
       <name>Security Considerations</name>
@@ -1129,6 +1247,8 @@ Total header size: 72 octets (consistent with CONDUIT)
       <references>
         <name>Normative References</name>
         <xi:include
+          href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.2119.xml" />
+        <xi:include
           href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.3550.xml" />
         <xi:include
           href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8174.xml" />
@@ -1140,7 +1260,139 @@ Total header size: 72 octets (consistent with CONDUIT)
       <references>
         <name>Informative References</name>
         <xi:include
-          href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.2119.xml" />
+          href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.9460.xml" />
+        <reference anchor="NIST.IR.8547" target="https://nvlpubs.nist.gov/nistpubs/ir/2024/NIST.IR.8547.ipd.pdf">
+          <front>
+            <title>Transition to Post-Quantum Cryptography Standards</title>
+            <author>
+              <organization>NIST</organization>
+            </author>
+            <date year="2024" month="November"/>
+          </front>
+        </reference>
+        <reference anchor="ENISA-PQC" target="https://www.enisa.europa.eu/publications/post-quantum-cryptography-integration-study">
+          <front>
+            <title>Post-Quantum Cryptography – Integration study</title>
+            <author>
+              <organization>ENISA</organization>
+            </author>
+            <date year="2022" month="October"/>
+          </front>
+        </reference>
+        <reference anchor="BSI-PQC" target="https://www.bsi.bund.de/SharedDocs/Downloads/EN/BSI/Publications/Brochure/quantum-safe-cryptography.pdf">
+          <front>
+            <title>Quantum-safe cryptography – fundamentals, current developments and recommendations</title>
+            <author>
+              <organization>BSI</organization>
+            </author>
+            <date year="2021"/>
+          </front>
+        </reference>
+        <reference anchor="I-D.ietf-pquip-pqc-engineers">
+           <front>
+              <title>Post-Quantum Cryptography for Engineers</title>
+              <author initials="A." surname="Banerjee" fullname="Aritra Banerjee">
+                 <organization>Nokia</organization>
+              </author>
+              <author initials="T." surname="Reddy.K" fullname="Tirumaleswar Reddy.K">
+                 <organization>Nokia</organization>
+              </author>
+              <author initials="D." surname="Schoinianakis" fullname="Dimitrios Schoinianakis">
+                 <organization>Nokia</organization>
+              </author>
+              <author initials="T." surname="Hollebeek" fullname="Tim Hollebeek">
+                 <organization>DigiCert</organization>
+              </author>
+              <author initials="M." surname="Ounsworth" fullname="Mike Ounsworth">
+                 <organization>Entrust Limited</organization>
+              </author>
+              <date month="October" day="21" year="2024"/>
+           </front>
+           <seriesInfo name="Internet-Draft" value="draft-ietf-pquip-pqc-engineers-06"/>
+        </reference>
+        <reference anchor="I-D.ietf-tls-hybrid-design">
+           <front>
+              <title>Hybrid key exchange in TLS 1.3</title>
+              <author initials="D." surname="Stebila" fullname="Douglas Stebila">
+                 <organization>University of Waterloo</organization>
+              </author>
+              <author initials="S." surname="Fluhrer" fullname="Scott Fluhrer">
+                 <organization>Cisco Systems</organization>
+              </author>
+              <author initials="S." surname="Gueron" fullname="Shay Gueron">
+                 <organization>University of Haifa and Meta</organization>
+              </author>
+              <date month="January" day="14" year="2025"/>
+           </front>
+           <seriesInfo name="Internet-Draft" value="draft-ietf-tls-hybrid-design-12"/>
+        </reference>
+        <reference anchor="I-D.ietf-tls-mlkem">
+           <front>
+              <title>ML-KEM Post-Quantum Key Agreement for TLS 1.3</title>
+              <author initials="D." surname="Connolly" fullname="Deirdre Connolly">
+                 <organization>SandboxAQ</organization>
+              </author>
+              <date month="February" day="12" year="2026"/>
+           </front>
+           <seriesInfo name="Internet-Draft" value="draft-ietf-tls-mlkem-07"/>
+        </reference>
+        <reference anchor="CNSA2.0" target="https://media.defense.gov/2022/Sep/07/2003071834/-1/-1/0/CSA_CNSA_2.0_ALGO_FUTURE_QUANTUM_RESISTANT_ALGORITHM_REQUIREMENTS.PDF">
+          <front>
+            <title>Announcing the Commercial National Security Algorithm Suite 2.0</title>
+            <author>
+              <organization>National Security Agency</organization>
+            </author>
+            <date year="2022" month="September"/>
+          </front>
+        </reference>
+        <reference anchor="I-D.ietf-tls-esni">
+           <front>
+              <title>TLS Encrypted Client Hello</title>
+              <author initials="E." surname="Rescorla" fullname="Eric Rescorla">
+                 <organization>Independent</organization>
+              </author>
+              <author initials="K." surname="Oku" fullname="Kazuho Oku">
+                 <organization>Fastly</organization>
+              </author>
+              <author initials="N." surname="Sullivan" fullname="Nick Sullivan">
+                 <organization>Cryptography Consulting LLC</organization>
+              </author>
+              <author initials="C. A." surname="Wood" fullname="Christopher A. Wood">
+                 <organization>Cloudflare</organization>
+              </author>
+              <date month="June" day="14" year="2025"/>
+           </front>
+           <seriesInfo name="Internet-Draft" value="draft-ietf-tls-esni-25"/>
+        </reference>
+        <reference anchor="RFC9370" target="https://www.rfc-editor.org/info/rfc9370">
+          <front>
+            <title>Multiple Key Exchanges in the Internet Key Exchange Protocol Version 2 (IKEv2)</title>
+            <author initials="CJ." surname="Tjhai" fullname="Cen Jung Tjhai">
+              <organization/>
+            </author>
+            <author initials="M." surname="Tomlinson" fullname="M. Tomlinson">
+              <organization/>
+            </author>
+            <author initials="G." surname="Bartlett" fullname="G. Bartlett">
+              <organization/>
+            </author>
+            <author initials="S." surname="Fluhrer" fullname="S. Fluhrer">
+              <organization/>
+            </author>
+            <author initials="D." surname="Van Geest" fullname="D. Van Geest">
+              <organization/>
+            </author>
+            <author initials="O." surname="Garcia-Morchon" fullname="O. Garcia-Morchon">
+              <organization/>
+            </author>
+            <author initials="V." surname="Smyslov" fullname="V. Smyslov">
+              <organization/>
+            </author>
+            <date year="2023" month="May"/>
+          </front>
+          <seriesInfo name="RFC" value="9370"/>
+          <seriesInfo name="DOI" value="10.17487/RFC9370"/>
+        </reference>
       </references>
     </references>
     <section numbered="false">
